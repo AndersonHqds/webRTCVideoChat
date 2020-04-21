@@ -37,7 +37,7 @@ export class SocketServer {
       const { roomName, userName } = socket.handshake.query;
       socket.join(roomName);
       this.io.to(roomName).emit('add-users', {
-        users: [{ id: socket.id, name: userName }],
+        users: Object.keys(this.io.sockets.adapter.rooms[roomName].sockets),
       });
 
       socket.on('disconnect', () => {
@@ -45,7 +45,7 @@ export class SocketServer {
       });
 
       socket.on('make-offer', (data) => {
-        console.log('MAKING OFFER', socket.id);
+        console.log("Making offer for id: " + socket.id );
         socket.to(data.to).emit('offer-made', {
           offer: data.offer,
           socket: socket.id,
@@ -53,7 +53,7 @@ export class SocketServer {
       });
 
       socket.on('make-answer', (data) => {
-        console.log('MAKING ANSWER', socket.id);
+        console.log("Making answer from the id: " + socket.id );
         socket.to(data.to).emit('answer-made', {
           socket: socket.id,
           answer: data.answer,

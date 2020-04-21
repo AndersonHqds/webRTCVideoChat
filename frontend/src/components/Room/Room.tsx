@@ -1,13 +1,11 @@
 import React from 'react';
-import { Grid, Typography, Button } from '@material-ui/core';
+import { Grid, Typography } from '@material-ui/core';
 import socketIO from 'socket.io-client';
 
 import Participant from '../Participant';
 
 import webRTC from '../../helpers/webrtc';
 import { useStyles } from './style';
-
-// import { Container } from './styles';
 
 interface IProps {
   userName: string;
@@ -28,9 +26,9 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
     }),
   );
   const socket = React.useRef<any>(null);
-  const answersFrom = React.useRef<any[]>([]);
+  const answersFrom = React.useRef<string[]>([]);
   const lastId = React.useRef<string | null>(null);
-  const [users, setUsers] = React.useState<any[]>([]);
+  const [users, setUsers] = React.useState<object[]>([]);
   const [stream, setStream] = React.useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = React.useState<any[]>([]);
   const classes = useStyles();
@@ -41,6 +39,7 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
         const offer = await pc.current.createOffer();
         await pc.current?.setLocalDescription(new webRTC.sessionDescription(offer));
         if (socket.current) {
+          console.log('###### Making offer to ' + id);
           socket.current.emit('make-offer', {
             offer: offer,
             to: id,
@@ -56,12 +55,19 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
     socket.current = socketIO('http://localhost:5000', { query: { roomName: roomName, userName: userName } });
     socket.current.on('add-users', (data: any) => {
       console.log(`My id: ${socket.current.id}`);
+      console.log(data.users);
 
-      if (data.users[0].id !== socket.current.id) {
+      if (data.users[0]!== socket.current.id) {
         setUsers((prevUsers: any[]) => [...prevUsers, { ...data.users[0] }]);
       }
-
-      createOffer(data.users[0].id);
+      
+      data.users.forEach((id: string) => {
+        if(id === socket.current.id) return;
+        if (!answersFrom.current.includes(id)) {
+          console.log(answersFrom.current, !answersFrom.current[data.socket], "59");
+          createOffer(id)
+        }
+      });
     });
 
     socket.current.on('remove-user', (id: string) => {
@@ -73,7 +79,9 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
         await pc.current.setRemoteDescription(new webRTC.sessionDescription(data.offer));
         const answer = await pc.current.createAnswer();
         await pc.current.setLocalDescription(new webRTC.sessionDescription(answer));
+        console.log("###### Offer made from " + data.socket);
         if (socket.current) {
+          console.log("###### Making answer to " + data.socket);
           socket.current.emit('make-answer', {
             answer,
             to: data.socket,
@@ -85,10 +93,12 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
     socket.current.on('answer-made', async (data: any) => {
       if (pc.current) {
         lastId.current = data.socket;
+        console.log("####### Answer made to " + data.socket);
         await pc.current.setRemoteDescription(new webRTC.sessionDescription(data.answer));
-        if (!answersFrom.current[data.socket]) {
+        console.log(answersFrom.current, !answersFrom.current[data.socket])
+        if (!answersFrom.current.includes(data.socket)) {
           createOffer(data.socket);
-          answersFrom.current[data.socket] = true;
+          answersFrom.current.push(data.socket);
         }
       }
     });
@@ -106,17 +116,9 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
     );
 
     pc.current.ontrack = function (obj: any) {
-      //console.log(lastId.current);
-      //console.log(users);
-      //const user = users.filter((user) => user.id === lastId.current)[0];
-      //console.log(user);
-      // if (user) {
-      //   setRemoteStreams((prevStream: any[]) => [
-      //     ...prevStream,
-      //     { stream: obj.streams[0], id: user.id, name: user.name },
-      //   ]);
-      // }
-      setRemoteStreams((prevStream: any[]) => [...prevStream, { stream: obj.streams[0] }]);
+      console.log(obj.streams[0]);
+      const streams = remoteStreams.filter(stream => stream.stream.id !== obj.streams[0].id);
+      setRemoteStreams((prevStream: any[]) => [...streams, { stream: obj.streams[0] }]);
     };
   }, []);
 
@@ -124,12 +126,6 @@ const Room: React.FC<IProps> = ({ userName, roomName, handleLogout }) => {
     <Grid container spacing={2} className={classes.gridContainer}>
       <Grid item xs={4} style={{ background: '#FFF' }}>
         <Typography variant="h4">Users</Typography>
-        {console.log(users)}
-        {/* {users.map((user) => (
-          <Button key={user.id} onClick={() => createOffer(user.id)}>
-            {user.name}
-          </Button>
-        ))} */}
         {remoteStreams &&
           remoteStreams.map((stream, index) => <Participant key={index} userName={''} stream={stream.stream} />)}
       </Grid>
